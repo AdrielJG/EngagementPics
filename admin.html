@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Wedding Photos — Admin</title>
+  <style>
+    :root {
+      --bg: #0b0b0f;
+      --fg: #f5f5f5;
+      --card: #1a1a20;
+      --accent: #22c55e;
+      --muted: #8a8a92;
+      --wa: #25D366;
+    }
+
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--fg);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      padding-bottom: 100px;
+    }
+
+    header {
+      padding: 16px;
+      position: sticky;
+      top: 0;
+      background: var(--bg);
+      z-index: 5;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    h1 {
+      font-size: 18px;
+      margin: 0 0 4px;
+    }
+
+    #sub {
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    #login-screen {
+      max-width: 340px;
+      margin: 80px auto;
+      padding: 0 20px;
+      display: none;
+    }
+
+    #login-screen input {
+      width: 100%;
+      padding: 12px;
+      margin-bottom: 10px;
+      border-radius: 8px;
+      border: 1px solid #333;
+      background: #151519;
+      color: #fff;
+      font-size: 15px;
+    }
+
+    #login-screen button {
+      width: 100%;
+      padding: 12px;
+      border-radius: 8px;
+      border: none;
+      background: var(--accent);
+      color: #04220f;
+      font-weight: 700;
+      font-size: 15px;
+      cursor: pointer;
+    }
+
+    #login-error {
+      color: #ef4444;
+      font-size: 13px;
+      margin-top: 8px;
+      min-height: 16px;
+    }
+
+    #gallery {
+      display: none;
+    }
+
+    #grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+      gap: 10px;
+      padding: 16px;
+    }
+
+    .card {
+      position: relative;
+      border-radius: 10px;
+      overflow: hidden;
+      background: var(--card);
+      aspect-ratio: 1;
+      cursor: pointer;
+    }
+
+    .card img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    .check {
+      position: absolute;
+      top: 6px;
+      right: 6px;
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      border: 2px solid #fff;
+      background: rgba(0, 0, 0, 0.35);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      font-size: 14px;
+    }
+
+    .card.selected .check {
+      background: var(--accent);
+      border-color: var(--accent);
+    }
+
+    .card.selected {
+      outline: 3px solid var(--accent);
+    }
+
+    #empty {
+      text-align: center;
+      padding: 60px 20px;
+      color: var(--muted);
+      display: none;
+    }
+
+    #actionbar {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      padding: 14px 16px;
+      background: var(--card);
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+      display: none;
+      gap: 10px;
+    }
+
+    #actionbar.active {
+      display: flex;
+    }
+
+    #actionbar button {
+      flex: 1;
+      padding: 13px;
+      border-radius: 10px;
+      border: none;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    #dl-btn {
+      background: var(--accent);
+      color: #04220f;
+    }
+
+    #wa-btn {
+      background: var(--wa);
+      color: #fff;
+    }
+
+    #logout-btn {
+      position: absolute;
+      top: 16px;
+      right: 16px;
+      background: none;
+      border: none;
+      color: var(--muted);
+      font-size: 13px;
+      cursor: pointer;
+      text-decoration: underline;
+    }
+
+    #toast {
+      position: fixed;
+      bottom: 96px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #000;
+      color: #fff;
+      padding: 9px 16px;
+      border-radius: 20px;
+      font-size: 13px;
+      opacity: 0;
+      transition: opacity .3s;
+      pointer-events: none;
+      z-index: 9;
+    }
+
+    #toast.show {
+      opacity: 0.95;
+    }
+  </style>
+</head>
+
+<body>
+
+  <div id="login-screen">
+    <h1>Admin login</h1>
+    <p style="color:var(--muted); font-size:13px;">Sign in with the admin account you created in Firebase.</p>
+    <input id="email" type="email" placeholder="Email" autocomplete="username">
+    <input id="password" type="password" placeholder="Password" autocomplete="current-password">
+    <button id="login-btn">Log in</button>
+    <div id="login-error"></div>
+  </div>
+
+  <div id="gallery">
+    <header>
+      <button id="logout-btn">Log out</button>
+      <h1>Wedding Photos</h1>
+      <div id="sub">Loading…</div>
+    </header>
+    <div id="grid"></div>
+    <div id="empty">No photos yet — they'll appear here as guests send them.</div>
+    <div id="actionbar">
+      <button id="dl-btn">Download (<span id="dl-count">0</span>)</button>
+      <button id="wa-btn">Share via WhatsApp</button>
+    </div>
+  </div>
+  <div id="toast"></div>
+
+  <!-- ====== Firebase config: paste your own project's values here (same as capture.html) ====== -->
+  <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
+  <script>
+    const firebaseConfig = {
+      apiKey: "AIzaSyBsGVz9cCJoDM2qxh8ppv4l7x3F35-FEt4",
+      authDomain: "engagementpics.firebaseapp.com",
+      projectId: "engagementpics",
+      storageBucket: "engagementpics.firebasestorage.app",
+      messagingSenderId: "574944791816",
+      appId: "1:574944791816:web:af0237011ab9f25106b0bd",
+      measurementId: "G-KY0NGQMB2S"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth();
+    const db = firebase.firestore();
+  </script>
+  <!-- ============================================================================================= -->
+
+  <script>
+    const selected = new Set();
+    let photos = [];
+    let unsub = null;
+
+    const loginScreen = document.getElementById('login-screen');
+    const galleryScreen = document.getElementById('gallery');
+    const loginError = document.getElementById('login-error');
+
+    function toast(msg, ms) {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.classList.add('show');
+      setTimeout(() => t.classList.remove('show'), ms || 2000);
+    }
+
+    document.getElementById('login-btn').addEventListener('click', async () => {
+      loginError.textContent = '';
+      const email = document.getElementById('email').value.trim();
+      const password = document.getElementById('password').value;
+      try {
+        await auth.signInWithEmailAndPassword(email, password);
+      } catch (e) {
+        loginError.textContent = 'Login failed — check email and password.';
+      }
+    });
+
+    document.getElementById('logout-btn').addEventListener('click', () => auth.signOut());
+
+    auth.onAuthStateChanged(user => {
+      if (user && !user.isAnonymous) {
+        loginScreen.style.display = 'none';
+        galleryScreen.style.display = 'block';
+        subscribeToPhotos();
+      } else {
+        loginScreen.style.display = 'block';
+        galleryScreen.style.display = 'none';
+        if (unsub) {unsub(); unsub = null;}
+      }
+    });
+
+    function subscribeToPhotos() {
+      if (unsub) return;
+      unsub = db.collection('photos').orderBy('createdAt', 'desc')
+        .onSnapshot(snap => {
+          photos = snap.docs.map(d => ({id: d.id, ...d.data()}));
+          render();
+        }, err => {
+          document.getElementById('sub').textContent = 'Could not load photos.';
+          console.error(err);
+        });
+    }
+
+    function render() {
+      const grid = document.getElementById('grid');
+      const empty = document.getElementById('empty');
+      document.getElementById('sub').textContent = photos.length + ' photo(s) received';
+      if (photos.length === 0) {
+        grid.innerHTML = '';
+        empty.style.display = 'block';
+      } else {
+        empty.style.display = 'none';
+        grid.innerHTML = photos.map(p => `
+      <div class="card ${selected.has(p.id) ? 'selected' : ''}" data-id="${p.id}">
+        <img src="${p.url}" loading="lazy">
+        <div class="check">${selected.has(p.id) ? '✓' : ''}</div>
+      </div>
+    `).join('');
+        grid.querySelectorAll('.card').forEach(el => {
+          el.addEventListener('click', () => toggle(el.dataset.id));
+        });
+      }
+      const bar = document.getElementById('actionbar');
+      bar.classList.toggle('active', selected.size > 0);
+      document.getElementById('dl-count').textContent = selected.size;
+    }
+
+    function toggle(id) {
+      if (selected.has(id)) selected.delete(id); else selected.add(id);
+      render();
+    }
+
+    async function fetchBlob(url) {
+      const res = await fetch(url);
+      return await res.blob();
+    }
+
+    async function downloadSelected() {
+      const items = photos.filter(p => selected.has(p.id));
+      toast('Preparing download...', 1500);
+      for (const p of items) {
+        try {
+          const blob = await fetchBlob(p.url);
+          const a = document.createElement('a');
+          a.href = URL.createObjectURL(blob);
+          a.download = p.id + '.jpg';
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          await new Promise(r => setTimeout(r, 300));
+        } catch (e) {console.error(e);}
+      }
+    }
+
+    async function shareWhatsapp() {
+      const items = photos.filter(p => selected.has(p.id));
+      if (items.length === 0) return;
+      try {
+        const files = await Promise.all(items.map(async p => {
+          const blob = await fetchBlob(p.url);
+          return new File([blob], p.id + '.jpg', {type: 'image/jpeg'});
+        }));
+        if (navigator.canShare && navigator.canShare({files})) {
+          await navigator.share({files, title: 'Wedding photos'});
+          return;
+        }
+      } catch (e) {console.error(e);}
+      toast('Downloading — attach them in WhatsApp manually', 2500);
+      await downloadSelected();
+      window.open('https://wa.me/', '_blank');
+    }
+
+    document.getElementById('dl-btn').addEventListener('click', downloadSelected);
+    document.getElementById('wa-btn').addEventListener('click', shareWhatsapp);
+  </script>
+</body>
+
+</html>

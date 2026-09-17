@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Wedding Photo Booth</title>
+<style>
+  :root { --accent:#e0b94f; --like:#22c55e; --dislike:#ef4444; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin:0; padding:0; height:100%; background:#000; color:#fff;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; overflow:hidden; }
+  #app { position:relative; width:100vw; height:100vh; height:100dvh; display:flex; flex-direction:column; }
+  #stage { flex:1; position:relative; overflow:hidden; background:#111; }
+  video, #shot { width:100%; height:100%; object-fit:cover; display:block; }
+  #shot { display:none; }
+  #flip-btn { position:absolute; top:16px; right:16px; z-index:5; width:44px; height:44px;
+    border-radius:50%; background:rgba(0,0,0,0.45); border:1px solid rgba(255,255,255,0.3);
+    color:#fff; font-size:20px; display:flex; align-items:center; justify-content:center; }
+  #banner { position:absolute; top:16px; left:16px; right:70px; z-index:5; text-align:center;
+    font-size:13px; color:#fff; opacity:0.9; text-shadow:0 1px 4px rgba(0,0,0,0.9); pointer-events:none; }
+  #controls { padding:22px 20px calc(22px + env(safe-area-inset-bottom)); display:flex; justify-content:center;
+    align-items:center; gap:28px; background:rgba(0,0,0,0.55); }
+  button { border:none; cursor:pointer; }
+  #shutter-row, #decision-row { display:none; align-items:center; justify-content:center; gap:28px; width:100%; }
+  #shutter-row.active, #decision-row.active { display:flex; }
+  #shutter-btn { width:74px; height:74px; border-radius:50%; background:#fff; border:4px solid rgba(255,255,255,0.4); }
+  #shutter-btn:active { background:#ddd; }
+  .decision-btn { width:68px; height:68px; border-radius:50%; font-size:30px; color:#fff;
+    display:flex; align-items:center; justify-content:center; }
+  #dislike-btn { background:var(--dislike); }
+  #like-btn { background:var(--like); }
+  .decision-label { font-size:12px; color:#ccc; margin-top:6px; text-align:center; }
+  #decision-col { display:flex; flex-direction:column; align-items:center; }
+  #toast { position:absolute; bottom:110px; left:50%; transform:translateX(-50%); background:#000;
+    color:#fff; padding:10px 18px; border-radius:20px; font-size:14px; opacity:0; transition:opacity .3s;
+    pointer-events:none; z-index:6; white-space:nowrap; }
+  #toast.show { opacity:0.95; }
+  #error { position:absolute; inset:0; display:none; align-items:center; justify-content:center;
+    padding:28px; text-align:center; background:#111; font-size:15px; line-height:1.5; }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="stage">
+    <video id="video" autoplay playsinline muted></video>
+    <canvas id="canvas" style="display:none;"></canvas>
+    <img id="shot" alt="captured photo">
+    <div id="banner">💍 Tap the shutter to take a wedding photo</div>
+    <button id="flip-btn">🔄</button>
+    <div id="toast"></div>
+    <div id="error">Camera access is needed.<br>Please allow camera permission in your browser and reload the page.</div>
+  </div>
+  <div id="controls">
+    <div id="shutter-row" class="active">
+      <button id="shutter-btn"></button>
+    </div>
+    <div id="decision-row">
+      <div id="decision-col">
+        <button id="dislike-btn" class="decision-btn">✕</button>
+        <div class="decision-label">Retake</div>
+      </div>
+      <div id="decision-col">
+        <button id="like-btn" class="decision-btn">❤️</button>
+        <div class="decision-label">Send it</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ====== Firebase config: paste your own project's values here ====== -->
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
+<script>
+const firebaseConfig = {
+    apiKey: "AIzaSyBsGVz9cCJoDM2qxh8ppv4l7x3F35-FEt4",
+    authDomain: "engagementpics.firebaseapp.com",
+    projectId: "engagementpics",
+    storageBucket: "engagementpics.firebasestorage.app",
+    messagingSenderId: "574944791816",
+    appId: "1:574944791816:web:af0237011ab9f25106b0bd",
+    measurementId: "G-KY0NGQMB2S"
+  };
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db = firebase.firestore();
+
+// ====== Cloudinary config: paste your own values here (see SETUP-GUIDE.md) ======
+const CLOUDINARY_CLOUD_NAME = "tghgijfh";
+const CLOUDINARY_UPLOAD_PRESET = "engagement_pics";
+</script>
+<!-- ==================================================================== -->
+
+<script>
+let stream = null;
+let facingMode = 'environment';
+let currentBlob = null;
+
+const video = document.getElementById('video');
+const canvas = document.getElementById('canvas');
+const shotImg = document.getElementById('shot');
+const errorBox = document.getElementById('error');
+const toastEl = document.getElementById('toast');
+const shutterRow = document.getElementById('shutter-row');
+const decisionRow = document.getElementById('decision-row');
+const banner = document.getElementById('banner');
+
+function toast(msg, ms) {
+  toastEl.textContent = msg;
+  toastEl.classList.add('show');
+  setTimeout(() => toastEl.classList.remove('show'), ms || 1800);
+}
+
+async function startCamera() {
+  if (stream) { stream.getTracks().forEach(t => t.stop()); }
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode }, audio: false });
+    video.srcObject = stream;
+    errorBox.style.display = 'none';
+  } catch (e) {
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+      video.srcObject = stream;
+      errorBox.style.display = 'none';
+    } catch (e2) {
+      errorBox.style.display = 'flex';
+    }
+  }
+}
+
+document.getElementById('flip-btn').addEventListener('click', () => {
+  facingMode = facingMode === 'environment' ? 'user' : 'environment';
+  startCamera();
+});
+
+async function ensureAuth() {
+  return new Promise((resolve) => {
+    auth.onAuthStateChanged(user => {
+      if (user) { resolve(user); return; }
+      auth.signInAnonymously().catch(() => {});
+    });
+    if (!auth.currentUser) auth.signInAnonymously().catch(() => {});
+  });
+}
+
+function showShutter() {
+  video.style.display = 'block';
+  shotImg.style.display = 'none';
+  shutterRow.classList.add('active');
+  decisionRow.classList.remove('active');
+  banner.style.display = 'block';
+}
+
+function showDecision() {
+  video.style.display = 'none';
+  shotImg.style.display = 'block';
+  shutterRow.classList.remove('active');
+  decisionRow.classList.add('active');
+  banner.style.display = 'none';
+}
+
+function capture() {
+  const vw = video.videoWidth, vh = video.videoHeight;
+  if (!vw || !vh) return;
+  const maxDim = 1600;
+  let w = vw, h = vh;
+  if (w > h && w > maxDim) { h = Math.round(h * (maxDim / w)); w = maxDim; }
+  else if (h >= w && h > maxDim) { w = Math.round(w * (maxDim / h)); h = maxDim; }
+  canvas.width = w; canvas.height = h;
+  const ctx = canvas.getContext('2d');
+  if (facingMode === 'user') { ctx.translate(w, 0); ctx.scale(-1, 1); }
+  ctx.drawImage(video, 0, 0, w, h);
+  canvas.toBlob(blob => {
+    currentBlob = blob;
+    shotImg.src = URL.createObjectURL(blob);
+    showDecision();
+  }, 'image/jpeg', 0.85);
+}
+
+async function sendPhoto() {
+  if (!currentBlob) { showShutter(); return; }
+  const blobToSend = currentBlob;
+  currentBlob = null;
+  showShutter();
+  toast('Sending... 💌', 4000);
+  try {
+    await ensureAuth();
+    const id = (crypto.randomUUID ? crypto.randomUUID() : 'p_' + Date.now() + '_' + Math.random().toString(36).slice(2));
+
+    const form = new FormData();
+    form.append('file', blobToSend, id + '.jpg');
+    form.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
+    form.append('public_id', 'wedding-photos/' + id);
+
+    const uploadRes = await fetch(
+      `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`,
+      { method: 'POST', body: form }
+    );
+    if (!uploadRes.ok) throw new Error('Cloudinary upload failed');
+    const uploadData = await uploadRes.json();
+    const url = uploadData.secure_url;
+
+    await db.collection('photos').doc(id).set({
+      url,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    toast('Sent! Thank you 🎉', 1800);
+  } catch (e) {
+    console.error(e);
+    toast('Could not send — check connection', 2500);
+  }
+}
+
+function discardPhoto() {
+  currentBlob = null;
+  showShutter();
+}
+
+document.getElementById('shutter-btn').addEventListener('click', capture);
+document.getElementById('like-btn').addEventListener('click', sendPhoto);
+document.getElementById('dislike-btn').addEventListener('click', discardPhoto);
+
+startCamera();
+ensureAuth();
+</script>
+</body>
+</html>
